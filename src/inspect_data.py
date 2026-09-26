@@ -38,24 +38,61 @@ df = pd.read_csv(
     header=None, 
     names=my_columns_names
     )
-print(df.shape)
+# print(df.shape)
 # print(df.isna().sum())
 # print(df.head()[["sensor measurement 1","sensor measurement 2","sensor measurement 3"]])
-# print(df.nunique())
+# print(df.index[(df.nunique()==1).values])
+
+# Removing columns with the same values for all rows
+useful_cols = df.columns[(df.nunique()>1).values]
+df = df[useful_cols]
+print(useful_cols)
 
 
 
-meas_num = 3
+
+# # Plotting the evolution of a certain feature over time for multiple different machines
+# meas_num = 3
+# max_time = max(df["unit number"].value_counts())
+# total_trajs = df["unit number"].nunique()
+# print(total_trajs)
+# time = np.arange(max_time)
+# fig = plt.figure()
+# plt.xlabel("Time")
+# plt.ylabel(f"Sensor Measurement {meas_num}")
+# for traj_num in np.linspace(1,total_trajs,3).astype(int):
+#     traj_data = df[df["unit number"] == traj_num]
+#     plt.plot(traj_data["time in cycles"], traj_data[f"sensor measurement {meas_num}"])
+    
+# plt.show() 
+
+# Plotting the evolution of the rolling mean of a certain feature over time for multiple different machines
+meas_num = 4
 max_time = max(df["unit number"].value_counts())
 total_trajs = df["unit number"].nunique()
-print(total_trajs)
 time = np.arange(max_time)
 fig = plt.figure()
 plt.xlabel("Time")
 plt.ylabel(f"Sensor Measurement {meas_num}")
-for traj_num in np.linspace(1,total_trajs,5).astype(int):
+for traj_num in np.linspace(1,total_trajs,8).astype(int):
     traj_data = df[df["unit number"] == traj_num]
-    plt.plot(traj_data["time in cycles"], traj_data[f"sensor measurement {meas_num}"])
+    rolling_avg = traj_data[f"sensor measurement {meas_num}"].rolling(20).mean()[20:]
+    plt.plot(traj_data["time in cycles"][20:], rolling_avg)
     
 plt.show() 
 
+# # Plotting the evolution of several features over time for one machine
+# unit_1 = df[df["unit number"] == 1]
+# time = np.arange(len(unit_1))
+# fig = plt.figure()
+# plt.xlabel("Time")
+# plt.ylabel("Measurement")
+# meas_inds = [2,4,15,8,13,17]
+# colors = ['r','b','g','c','y']
+# for ind, col in zip(meas_inds,colors):
+#     meas = f"sensor measurement {ind}"
+#     devs = unit_1[meas] - unit_1[meas].mean() 
+#     devs = devs/max(abs(devs))
+#     plt.plot(time, devs, color=col, label=str(ind))
+# plt.legend()
+# plt.show()
