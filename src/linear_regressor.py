@@ -74,7 +74,7 @@ df_reduced = df_train[
 
 meas_4_max = df_reduced["sensor measurement 4"].max()
 
-df_reduced["positive measurement"] = abs(
+df_reduced["distance_from_max"] = abs(
     df_reduced["sensor measurement 4"] - meas_4_max
 )
 
@@ -83,14 +83,14 @@ df_reduced["positive measurement"] = abs(
 
 df_reduced["rolling measurement"] = (
     df_reduced
-    .groupby("unit number")["positive measurement"]
+    .groupby("unit number")["distance_from_max"]
     .transform(lambda x: x.rolling(20).mean())
 )
 
 # Add a gradient feature
 df_reduced["gradient"] = (-df_reduced
     .groupby("unit number")["rolling measurement"]
-    .transform(lambda x: x - x.shift(10))
+    .transform(lambda x: x - x.shift(20))
 )
 
 # print(df_reduced["gradient"].apply(lambda x: (x <= 0)).value_counts())
@@ -108,84 +108,70 @@ df_reduced["times remaining"] = (
 # Prepare X and y
 # --------------------------------------------------
 
-# X = df_reduced["rolling measurement"]
-# y = df_reduced["times remaining"]
+X = df_reduced[["rolling measurement","gradient"]]
+y = df_reduced["times remaining"]
 
-# Z = pd.concat([X, y], axis=1)
+Z = pd.concat([X, y], axis=1)
 
-# # Remove rows where rolling mean doesn't exist yet
-# Z = Z.dropna()
+# Remove rows where rolling mean doesn't exist yet
+Z = Z.dropna()
 
-# X = Z["rolling measurement"].values
-# y = Z["times remaining"].values
+X = Z[["rolling measurement","gradient"]].values
+y = Z["times remaining"].values
 
-# X = X.reshape(-1, 1)
-# y = y.reshape(-1, 1)
+
+X = X.reshape(-1, 2)
+y = y.reshape(-1, 1)
+
+print(X[:10])
+print(y[:10])
 
 
 # --------------------------------------------------
 # Fit linear model
 # --------------------------------------------------
 
-# LR = LinearRegression()
+LR = LinearRegression()
 
-# reg = LR.fit(X, y)
+reg = LR.fit(X, y)
 
-# print(f"Gradient of the fitted line is {reg.coef_}")
-# print(f"y-intercept of the fitted line is {reg.intercept_}")
-# print(f"R² = {LR.score(X, y)}")
-
-
-# --------------------------------------------------
-# Create smooth x-values for plotting
-# --------------------------------------------------
-
-# x_plot = np.linspace(
-#     X.min(),
-#     X.max(),
-#     500
-# ).reshape(-1, 1)
-
-# y_pred = LR.predict(x_plot)
+print(f"Regression coefficients of the fitted line are {reg.coef_}")
+print(f"Intercept of the regression is {reg.intercept_}")
+print(f"R² = {LR.score(X, y)}")
 
 
-# --------------------------------------------------
-# Plot fitted line
-# --------------------------------------------------
 
-# plt.plot(
-#     x_plot,
-#     y_pred,
-#     label="Linear Fit"
-# )
-
-# plt.xlabel("Rolling Measurement")
-# plt.ylabel("Time Until Failure")
-# plt.legend()
-
-# plt.show()
 
 # --------------------------------------------------
 # Test data preparation
 # --------------------------------------------------
 
-# df_reduced = df_test[
-#     ["unit number", "time in cycles", "sensor measurement 4"]
-# ].copy()
+df_reduced = df_test[
+    ["unit number", "time in cycles", "sensor measurement 4"]
+].copy()
 
 
-# # Apply the same transformation used on the training data
+# Apply the same transformation used on the training data
 
-# df_reduced["positive measurement"] = abs(
-#     df_reduced["sensor measurement 4"] - meas_4_max
-# )
+df_reduced["distance_from_max"] = abs(
+    df_reduced["sensor measurement 4"] - meas_4_max
+)
 
-# # Calculate rolling mean separately for each machine
+# Calculate rolling mean separately for each machine
 
-# df_reduced["rolling measurement"] = (
-#     df_reduced
-#     .groupby("unit number")["positive measurement"]
-#     .transform(lambda x: x.rolling(20).mean())
+df_reduced["rolling measurement"] = (
+    df_reduced
+    .groupby("unit number")["distance_from_max"]
+    .transform(lambda x: x.rolling(20).mean())
+)
+
+# Add a gradient feature
+df_reduced["gradient"] = (-df_reduced
+    .groupby("unit number")["rolling measurement"]
+    .transform(lambda x: x - x.shift(20))
+)
+
+
 
 
 
@@ -195,53 +181,50 @@ df_reduced["times remaining"] = (
 
 # Take the final available measurement for each machine
 
-# Xtest = (
-#     df_reduced
-#     .groupby("unit number")["rolling measurement"]
-#     .last()
-# )
-
-# # Convert to NumPy array for sklearn
-
-# Xtest = Xtest.values.reshape(-1, 1)
-
 
 # Read the true RUL values
+df_RUL = pd.read_csv(
+    file_paths[0],
+    sep=r"\s+",
+    header=None
+)
 
-# df_RUL = pd.read_csv(
-#     file_paths[0],
-#     sep=r"\s+",
-#     header=None
-# )
+Xtest = (
+    df_reduced
+    .groupby("unit number")[["rolling measurement", "gradient"]]
+    .last()
+)
 
-# ytest = df_RUL.values.reshape(-1, 1)
+valid = Xtest.notna().all(axis=1)
 
+Xtest = Xtest.loc[valid]
 
-# --------------------------------------------------
-# Predict
-# --------------------------------------------------
+ytest = df_RUL.iloc[Xtest.index - 1, 0].values
 
-# y_pred_test = LR.predict(Xtest)
-# score = LR.score(Xtest,ytest)
-# print(score)
+y_pred_test = LR.predict(Xtest.values)
 
+score = LR.score(Xtest.values, ytest)
+
+print(score)
+
+# # Crude estimate of remaining life 
+# RUL_physical = abs(Xtest["rolling measurement"]/Xtest["gradient"])
+# print(RUL_physical[:10])
 
 # --------------------------------------------------
 # Plot
 # --------------------------------------------------
 
-# plt.scatter(Xtest, ytest, s=5, color="r", label="True Values")
-# plt.scatter(Xtest, y_pred_test, s=5, color="b", label="Predicted Values")
+plt.scatter(Xtest["gradient"], ytest, s=5, color="r", label="True Values")
+plt.scatter(Xtest["gradient"], y_pred_test, s=5, color="b", label="Predicted Values")
+# plt.scatter(Xtest["gradient"], RUL_physical, s=5, color="y", label="Physical Values")
 
-# plt.xlabel("Rolling Measurement")
-# plt.ylabel("Remaining Useful Life")
+plt.xlabel("Rolling Measurement")
+plt.ylabel("Remaining Useful Life")
 
-# plt.legend()
-# # plt.savefig("C:/Users/johnn/Documents/Python/Predictive_Maintenance_Project/output/LR_Rolling_Avg_Results.png")
-# plt.show()
-
-
-
+plt.legend()
+# plt.savefig("C:/Users/johnn/Documents/Python/Predictive_Maintenance_Project/output/LR_Rolling_Avg_Results.png")
+plt.show()
 
 
 
@@ -251,43 +234,11 @@ df_reduced["times remaining"] = (
 
 
 
-# # Plot the fitted line with the actual data
-# plt.plot(df_reduced["rolling measurement"], df_reduced["times remaining"], label="Actual Data")
-# plt.plot(X,y_pred,label="Fitted Line")
-# plt.xlabel("Time Until Failure")
-# plt.ylabel("Rolling Measurement")
-# plt.show()
-
-# # Fitting a quadratic model
-
-# poly = PolynomialFeatures(degree=2, include_bias=False)
-# poly_features = poly.fit_transform(X)
-
-# LR2 = LinearRegression()
-# quad = LR2.fit(poly_features, y)
-
-# print(f"Fitted quadratic coefficients are: {quad.coef_}")
-# print(f"Intercept of the quadratic model is: {quad.intercept_}")
-# print(f"Fitting Score is {LR2.score(poly_features,y)}")
 
 
-# # Create smooth x-values for plotting
-
-# x_plot = np.linspace(X.min(), X.max(), 500).reshape(-1, 1)
-
-# x_plot_poly = poly.transform(x_plot)
-
-# y_plot = quad.predict(x_plot_poly)
 
 
-# # Plot data and fitted quadratic
 
-# # plt.scatter(X, y, s=5, label="Actual Data")
-# plt.plot(x_plot, y_plot, label="Quadratic Fit")
 
-# plt.xlabel("Rolling Measurement")
-# plt.ylabel("Time Until Failure")
-# plt.legend()
-# plt.show()
 
 
