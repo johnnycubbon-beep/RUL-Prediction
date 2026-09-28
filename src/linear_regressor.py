@@ -66,16 +66,16 @@ df_test = pd.read_csv(
 # --------------------------------------------------
 
 df_reduced = df_train[
-    ["unit number", "time in cycles", "sensor measurement 4"]
+    ["unit number", "time in cycles", "sensor measurement 7"]
 ].copy()
 
 
-# Transform sensor measurement 4
+# Transform sensor measurement 2
 
-meas_4_max = df_reduced["sensor measurement 4"].max()
+meas_max = df_reduced["sensor measurement 7"].max()
 
 df_reduced["distance_from_max"] = abs(
-    df_reduced["sensor measurement 4"] - meas_4_max
+    df_reduced["sensor measurement 7"] - meas_max
 )
 
 
@@ -123,8 +123,8 @@ y = Z["times remaining"].values
 X = X.reshape(-1, 2)
 y = y.reshape(-1, 1)
 
-print(X[:10])
-print(y[:10])
+# print(X[:10])
+# print(y[:10])
 
 
 # --------------------------------------------------
@@ -139,7 +139,10 @@ print(f"Regression coefficients of the fitted line are {reg.coef_}")
 print(f"Intercept of the regression is {reg.intercept_}")
 print(f"R² = {LR.score(X, y)}")
 
-
+# plt.scatter(X[:,0],y,s=5)
+# plt.xlabel("Rolling Measurement")
+# plt.ylabel("Time until Failure")
+# plt.show()
 
 
 # --------------------------------------------------
@@ -147,14 +150,14 @@ print(f"R² = {LR.score(X, y)}")
 # --------------------------------------------------
 
 df_reduced = df_test[
-    ["unit number", "time in cycles", "sensor measurement 4"]
+    ["unit number", "time in cycles", "sensor measurement 7"]
 ].copy()
 
 
 # Apply the same transformation used on the training data
 
 df_reduced["distance_from_max"] = abs(
-    df_reduced["sensor measurement 4"] - meas_4_max
+    df_reduced["sensor measurement 7"] - meas_max
 )
 
 # Calculate rolling mean separately for each machine
@@ -170,6 +173,8 @@ df_reduced["gradient"] = (-df_reduced
     .groupby("unit number")["rolling measurement"]
     .transform(lambda x: x - x.shift(20))
 )
+
+
 
 
 
@@ -205,7 +210,7 @@ y_pred_test = LR.predict(Xtest.values)
 
 score = LR.score(Xtest.values, ytest)
 
-print(score)
+print(f"Score out of sample is {score}.")
 
 # # Crude estimate of remaining life 
 # RUL_physical = abs(Xtest["rolling measurement"]/Xtest["gradient"])
@@ -215,8 +220,8 @@ print(score)
 # Plot
 # --------------------------------------------------
 
-plt.scatter(Xtest["gradient"], ytest, s=5, color="r", label="True Values")
-plt.scatter(Xtest["gradient"], y_pred_test, s=5, color="b", label="Predicted Values")
+plt.scatter(Xtest["rolling measurement"], ytest, s=5, color="r", label="True Values")
+plt.scatter(Xtest["rolling measurement"], y_pred_test, s=5, color="b", label="Predicted Values")
 # plt.scatter(Xtest["gradient"], RUL_physical, s=5, color="y", label="Physical Values")
 
 plt.xlabel("Rolling Measurement")

@@ -17,7 +17,8 @@ for i in range(21):
 # Get a list of all the txt files in the folder 
 file_paths = [str(file) for file in data_dir.glob('*.txt')]
 file_paths.remove(r"C:\Users\johnn\Documents\Python\Predictive_Maintenance_Project\data\raw\CMAPSSData\readme.txt")
-file_paths = file_paths[4:]
+
+
 # print(len(file_paths))
 # print(file_paths[4])
 # print(file_paths)
@@ -26,27 +27,28 @@ file_paths = file_paths[4:]
 
 
 
-# with open(file_paths[0], "r") as file:
-#     line = file.readline()
-
-# print(repr(line))
-
-
 df = pd.read_csv(
-    file_paths[4],
+    file_paths[8],
     sep=r"\s+",
     header=None, 
     names=my_columns_names
     )
+
+
+
+# print(df["sensor measurement 17"].unique())
 # print(df.shape)
 # print(df.isna().sum())
 # print(df.head()[["sensor measurement 1","sensor measurement 2","sensor measurement 3"]])
 # print(df.index[(df.nunique()==1).values])
 
+
 # Removing columns with the same values for all rows
-useful_cols = df.columns[(df.nunique()>1).values]
+useful_cols = df.columns[(df.nunique()>5).values]
 df = df[useful_cols]
 print(useful_cols)
+# print(df.nunique(axis=0))
+
 
 
 
@@ -67,7 +69,7 @@ print(useful_cols)
 # plt.show() 
 
 # Plotting the evolution of the rolling mean of a certain feature over time for multiple different machines
-meas_num = 4
+meas_num = 7
 max_time = max(df["unit number"].value_counts())
 total_trajs = df["unit number"].nunique()
 time = np.arange(max_time)
