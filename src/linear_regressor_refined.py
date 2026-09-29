@@ -1,32 +1,35 @@
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from pathlib import Path
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
 
 
-def create_sensor_features(df, sensor_num, rolling_window=20, gradient_window=10):
-    
-    # f string for the sensor number
-    sensor = f"sensor measurement {sensor_num}"
+def create_sensor_features(df, sensor_numbers, rolling_window=20, gradient_window=10):
+    """Return raw, rolling-mean, and gradient features for selected sensors.
 
-    # Restricting dataframe to a few columns
-    df_reduced = df[["unit number", "time in cycles", sensor]].copy()
+    Rolling means and gradients are calculated independently for each unit.
+    The gradient is the rolling-mean change over ``gradient_window`` cycles,
+    divided by that window to express change per cycle.
+    """
+    feature_frame = df[["unit number", "time in cycles"]].copy()
 
-    # Maximum value of this feature in training data to make numbers more sensible
-    max_measurement = df_reduced[sensor].max()
+    for sensor_num in sensor_numbers:
+        sensor = f"sensor measurement {sensor_num}"
+        if sensor not in df.columns:
+            raise ValueError(f"Sensor column not found: {sensor}")
 
-    # Make numbers easier to interpret
-    df_reduced["distance from max"] = max_measurement - df_reduced[sensor]
+        raw_name = f"sensor_{sensor_num}_raw"
+        rolling_name = f"sensor_{sensor_num}_rolling_mean"
+        gradient_name = f"sensor_{sensor_num}_gradient"
 
-    # Create the rolling measurement feature
-    df_reduced["rolling measurement"] = (df_reduced
-                                         .groupby("unit number")[sensor]
-                                         .transform(lambda x: x.rolling(rolling_window).mean()))
+        feature_frame[raw_name] = df[sensor]
+        feature_frame[rolling_name] = (
+            df.groupby("unit number")[sensor]
+            .transform(lambda values: values.rolling(rolling_window).mean())
+        )
+        feature_frame[gradient_name] = (
+            feature_frame.groupby("unit number")[rolling_name]
+            .transform(
+                lambda values: (values - values.shift(gradient_window))
+                / gradient_window
+            )
+        )
 
-    df_reduced["gradient"] = (df_reduced
-    .groupby("unit number")["rolling measurement"]
-    .transform(lambda x: (x - x.shift(gradient_window))/gradient_window)
-    )
-
+    return feature_frame

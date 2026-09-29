@@ -1,249 +1,79 @@
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-
 from pathlib import Path
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+from linear_regressor_refined import create_sensor_features
 
 
-# Folder Path
+# Select any sensor measurements to use, for example [4, 7, 11].
+SENSOR_NUMBERS = [7]
+ROLLING_WINDOW = 20
+GRADIENT_WINDOW = 10
 
 data_dir = Path(
     "C:/Users/johnn/Documents/Python/Predictive_Maintenance_Project/data/raw/CMAPSSData"
 )
 
-
-# Generating a list of all the column names
-
-my_columns_names = [
+column_names = [
     "unit number",
     "time in cycles",
     "operational setting 1",
     "operational setting 2",
-    "operational setting 3"
+    "operational setting 3",
+    *[f"sensor measurement {i}" for i in range(1, 22)],
 ]
 
-for i in range(21):
-    name = f"sensor measurement {i+1}"
-    my_columns_names.append(name)
+# Keep the existing train/test dataset selection.
+file_paths = [
+    str(path) for path in data_dir.glob("*.txt") if path.name.lower() != "readme.txt"
+]
+train_path = file_paths[8]
+test_path = file_paths[4]
+rul_path = file_paths[0]
+
+df_train = pd.read_csv(train_path, sep=r"\s+", header=None, names=column_names)
+df_test = pd.read_csv(test_path, sep=r"\s+", header=None, names=column_names)
+df_RUL = pd.read_csv(rul_path, sep=r"\s+", header=None)
 
 
-# Get a list of all the txt files in the folder
-
-file_paths = [str(file) for file in data_dir.glob("*.txt")]
-
-file_paths.remove(
-    r"C:\Users\johnn\Documents\Python\Predictive_Maintenance_Project\data\raw\CMAPSSData\readme.txt"
+# Training rows have known end-of-life cycles, so derive RUL within each unit.
+train_features = create_sensor_features(
+    df_train, SENSOR_NUMBERS, ROLLING_WINDOW, GRADIENT_WINDOW
 )
-# print(file_paths)
+train_features["RUL"] = train_features["unit number"].map(
+    df_train.groupby("unit number")["time in cycles"].max()
+) - train_features["time in cycles"]
+
+feature_columns = [
+    name
+    for sensor_num in SENSOR_NUMBERS
+    for name in (
+        f"sensor_{sensor_num}_raw",
+        f"sensor_{sensor_num}_rolling_mean",
+        f"sensor_{sensor_num}_gradient",
+    )
+]
+train_data = train_features.dropna(subset=feature_columns)
+X_train = train_data[feature_columns]
+y_train = train_data["RUL"]
 
 
+# Fit using training data only.
+model = LinearRegression()
+model.fit(X_train, y_train)
 
 
-# Read in the training data
-
-df_train = pd.read_csv(
-    file_paths[8],
-    sep=r"\s+",
-    header=None,
-    names=my_columns_names
+# Test files contain truncated trajectories. Score the final available row for
+# each unit against its separately supplied true RUL value.
+test_features = create_sensor_features(
+    df_test, SENSOR_NUMBERS, ROLLING_WINDOW, GRADIENT_WINDOW
 )
-
-
-# Read in the test data
-
-df_test = pd.read_csv(
-    file_paths[4],
-    sep=r"\s+",
-    header=None,
-    names=my_columns_names
-)
-
-
-# --------------------------------------------------
-# Training data preparation
-# --------------------------------------------------
-
-df_reduced = df_train[
-    ["unit number", "time in cycles", "sensor measurement 7"]
-].copy()
-
-
-# Transform sensor measurement 2
-
-meas_max = df_reduced["sensor measurement 7"].max()
-
-df_reduced["distance_from_max"] = abs(
-    df_reduced["sensor measurement 7"] - meas_max
-)
-
-
-# Calculate rolling mean separately for each machine
-
-df_reduced["rolling measurement"] = (
-    df_reduced
-    .groupby("unit number")["distance_from_max"]
-    .transform(lambda x: x.rolling(20).mean())
-)
-
-# Add a gradient feature
-df_reduced["gradient"] = (-df_reduced
-    .groupby("unit number")["rolling measurement"]
-    .transform(lambda x: x - x.shift(20))
-)
-
-# print(df_reduced["gradient"].apply(lambda x: (x <= 0)).value_counts())
-
-# Calculate actual RUL for each training observation
-
-df_reduced["times remaining"] = (
-    df_reduced
-    .groupby("unit number")["time in cycles"]
-    .transform(lambda x: x.max() - x)
-)
-
-
-# --------------------------------------------------
-# Prepare X and y
-# --------------------------------------------------
-
-X = df_reduced[["rolling measurement","gradient"]]
-y = df_reduced["times remaining"]
-
-Z = pd.concat([X, y], axis=1)
-
-# Remove rows where rolling mean doesn't exist yet
-Z = Z.dropna()
-
-X = Z[["rolling measurement","gradient"]].values
-y = Z["times remaining"].values
-
-
-X = X.reshape(-1, 2)
-y = y.reshape(-1, 1)
-
-# print(X[:10])
-# print(y[:10])
-
-
-# --------------------------------------------------
-# Fit linear model
-# --------------------------------------------------
-
-LR = LinearRegression()
-
-reg = LR.fit(X, y)
-
-print(f"Regression coefficients of the fitted line are {reg.coef_}")
-print(f"Intercept of the regression is {reg.intercept_}")
-print(f"R² = {LR.score(X, y)}")
-
-# plt.scatter(X[:,0],y,s=5)
-# plt.xlabel("Rolling Measurement")
-# plt.ylabel("Time until Failure")
-# plt.show()
-
-
-# --------------------------------------------------
-# Test data preparation
-# --------------------------------------------------
-
-df_reduced = df_test[
-    ["unit number", "time in cycles", "sensor measurement 7"]
-].copy()
-
-
-# Apply the same transformation used on the training data
-
-df_reduced["distance_from_max"] = abs(
-    df_reduced["sensor measurement 7"] - meas_max
-)
-
-# Calculate rolling mean separately for each machine
-
-df_reduced["rolling measurement"] = (
-    df_reduced
-    .groupby("unit number")["distance_from_max"]
-    .transform(lambda x: x.rolling(20).mean())
-)
-
-# Add a gradient feature
-df_reduced["gradient"] = (-df_reduced
-    .groupby("unit number")["rolling measurement"]
-    .transform(lambda x: x - x.shift(20))
-)
-
-
-
-
-
-
-
-# --------------------------------------------------
-# Prepare Xtest and ytest
-# --------------------------------------------------
-
-# Take the final available measurement for each machine
-
-
-# Read the true RUL values
-df_RUL = pd.read_csv(
-    file_paths[0],
-    sep=r"\s+",
-    header=None
-)
-
-Xtest = (
-    df_reduced
-    .groupby("unit number")[["rolling measurement", "gradient"]]
-    .last()
-)
-
-valid = Xtest.notna().all(axis=1)
-
-Xtest = Xtest.loc[valid]
-
-ytest = df_RUL.iloc[Xtest.index - 1, 0].values
-
-y_pred_test = LR.predict(Xtest.values)
-
-score = LR.score(Xtest.values, ytest)
-
-print(f"Score out of sample is {score}.")
-
-# # Crude estimate of remaining life 
-# RUL_physical = abs(Xtest["rolling measurement"]/Xtest["gradient"])
-# print(RUL_physical[:10])
-
-# --------------------------------------------------
-# Plot
-# --------------------------------------------------
-
-plt.scatter(Xtest["rolling measurement"], ytest, s=5, color="r", label="True Values")
-plt.scatter(Xtest["rolling measurement"], y_pred_test, s=5, color="b", label="Predicted Values")
-# plt.scatter(Xtest["gradient"], RUL_physical, s=5, color="y", label="Physical Values")
-
-plt.xlabel("Rolling Measurement")
-plt.ylabel("Remaining Useful Life")
-
-plt.legend()
-# plt.savefig("C:/Users/johnn/Documents/Python/Predictive_Maintenance_Project/output/LR_Rolling_Avg_Results.png")
-plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+X_test = test_features.groupby("unit number")[feature_columns].last()
+X_test = X_test.dropna(subset=feature_columns)
+y_test = df_RUL.iloc[X_test.index.to_numpy(dtype=int) - 1, 0].to_numpy()
+y_pred = model.predict(X_test[feature_columns])
+
+print(f"Test R²: {r2_score(y_test, y_pred):.4f}")
+print(f"Test MSE: {mean_squared_error(y_test, y_pred):.4f}")
+print(f"Test MAE: {mean_absolute_error(y_test, y_pred):.4f}")
