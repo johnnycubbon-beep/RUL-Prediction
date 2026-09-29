@@ -69,7 +69,7 @@ print(useful_cols)
 # plt.show() 
 
 # Plotting the evolution of the rolling mean of a certain feature over time for multiple different machines
-meas_num = 7
+meas_num = 4
 max_time = max(df["unit number"].value_counts())
 total_trajs = df["unit number"].nunique()
 time = np.arange(max_time)
@@ -78,8 +78,8 @@ plt.xlabel("Time")
 plt.ylabel(f"Sensor Measurement {meas_num}")
 for traj_num in np.linspace(1,total_trajs,8).astype(int):
     traj_data = df[df["unit number"] == traj_num]
-    rolling_avg = traj_data[f"sensor measurement {meas_num}"].rolling(20).mean()[20:]
-    plt.plot(traj_data["time in cycles"][20:], rolling_avg)
+    rolling_avg = traj_data[f"sensor measurement {meas_num}"].rolling(150).mean()[150:]
+    plt.plot(traj_data["time in cycles"][150:], rolling_avg)
     
 plt.show() 
 
