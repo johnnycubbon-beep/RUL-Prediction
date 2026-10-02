@@ -34,6 +34,7 @@ df = pd.read_csv(
     names=my_columns_names
     )
 
+df["RUL"] = df["unit number"].map(df.groupby("unit number")["time in cycles"].max()) - df["time in cycles"]
 
 
 # print(df["sensor measurement 17"].unique())
@@ -46,7 +47,7 @@ df = pd.read_csv(
 # Removing columns with the same values for all rows
 useful_cols = df.columns[(df.nunique()>5).values]
 df = df[useful_cols]
-print(useful_cols)
+# print(useful_cols)
 # print(df.nunique(axis=0))
 
 
@@ -69,17 +70,22 @@ print(useful_cols)
 # plt.show() 
 
 # Plotting the evolution of the rolling mean of a certain feature over time for multiple different machines
-meas_num = 4
+meas_num = 15
+window = 100
+gradient_window = 30
 max_time = max(df["unit number"].value_counts())
 total_trajs = df["unit number"].nunique()
 time = np.arange(max_time)
 fig = plt.figure()
-plt.xlabel("Time")
-plt.ylabel(f"Sensor Measurement {meas_num}")
+plt.xlabel("Log RUL")
+plt.ylabel("Rolling Measurement")
+# plt.ylabel(f"Sensor Measurement {meas_num}")
 for traj_num in np.linspace(1,total_trajs,8).astype(int):
     traj_data = df[df["unit number"] == traj_num]
-    rolling_avg = traj_data[f"sensor measurement {meas_num}"].rolling(150).mean()[150:]
-    plt.plot(traj_data["time in cycles"][150:], rolling_avg)
+    rolling_avg = traj_data[f"sensor measurement {meas_num}"].rolling(window).mean()[window:]
+    gradient = rolling_avg.transform(lambda x: (x - x.shift(gradient_window))/gradient_window)
+        # print(len(gradient),len(traj_data["RUL"]))
+    plt.plot((traj_data["RUL"][window:]), rolling_avg)
     
 plt.show() 
 
